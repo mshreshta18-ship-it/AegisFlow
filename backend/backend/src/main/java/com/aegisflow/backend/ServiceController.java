@@ -15,30 +15,31 @@ import java.util.Map;
 @RestController
 public class ServiceController {
 
+    private final ServiceHealthLogRepository repository;
+
     private final HttpClient client = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(2))
             .build();
+
+    public ServiceController(ServiceHealthLogRepository repository) {
+        this.repository = repository;
+    }
 
     @GetMapping("/api/services")
     public List<Map<String, String>> getServices() {
         return List.of(
             checkService("AegisFlow Backend",
                 "http://localhost:8080/api/health"),
-
             checkService("Payment Service",
                 "http://localhost:8081/actuator/health"),
-
             checkService("Order Service",
                 "http://localhost:8082/actuator/health"),
-
             checkService("Inventory Service",
                 "http://localhost:8083/actuator/health")
         );
     }
 
-    private Map<String, String> checkService(
-            String name, String url) {
-
+    private Map<String, String> checkService(String name, String url) {
         String status = "DOWN";
 
         try {
@@ -61,9 +62,14 @@ public class ServiceController {
             status = "DOWN";
         }
 
+        // Save health status to database
+        ServiceHealthLog log = new ServiceHealthLog(name, status);
+        repository.save(log);
+
         return Map.of(
                 "name", name,
                 "status", status
         );
     }
 }
+
