@@ -5,8 +5,10 @@ import "./App.css";
 function App() {
   const [services, setServices] = useState([]);
   const [history, setHistory] = useState([]);
+  const [anomalies, setAnomalies] = useState([]);
   const [error, setError] = useState("");
   const [historyError, setHistoryError] = useState("");
+  const [anomalyError, setAnomalyError] = useState("");
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
 
@@ -42,6 +44,20 @@ function App() {
       } catch {
         setHistoryError("Unable to load monitoring history");
       }
+
+      try {
+        const response = await fetch("/api/anomalies");
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch anomalies");
+        }
+
+        const data = await response.json();
+        setAnomalies(data);
+        setAnomalyError("");
+      } catch {
+        setAnomalyError("Unable to load service risk analysis");
+      }
     };
 
     fetchData();
@@ -60,8 +76,17 @@ function App() {
   ).length;
 
   const recentHistory = [...history]
-    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+    .sort(
+      (a, b) =>
+        new Date(b.timestamp) - new Date(a.timestamp)
+    )
     .slice(0, 20);
+
+  const riskColor = (riskLevel) => {
+    if (riskLevel === "HIGH") return "#f87171";
+    if (riskLevel === "MEDIUM") return "#facc15";
+    return "#4ade80";
+  };
 
   return (
     <div
@@ -78,9 +103,17 @@ function App() {
 
       <hr style={{ borderColor: "#334155" }} />
 
+      {/* SYSTEM OVERVIEW */}
+
       <h2>System Overview</h2>
 
-      <div style={{ display: "flex", gap: "20px", flexWrap: "wrap" }}>
+      <div
+        style={{
+          display: "flex",
+          gap: "20px",
+          flexWrap: "wrap"
+        }}
+      >
         <div style={summaryStyle}>
           <h3>Total Services</h3>
           <h1>{services.length}</h1>
@@ -88,27 +121,46 @@ function App() {
 
         <div style={summaryStyle}>
           <h3>Healthy Services</h3>
-          <h1 style={{ color: "#4ade80" }}>{upCount}</h1>
+          <h1 style={{ color: "#4ade80" }}>
+            {upCount}
+          </h1>
         </div>
 
         <div style={summaryStyle}>
           <h3>Failed Services</h3>
-          <h1 style={{ color: "#f87171" }}>{downCount}</h1>
+          <h1 style={{ color: "#f87171" }}>
+            {downCount}
+          </h1>
         </div>
       </div>
 
-      <h2 style={{ marginTop: "35px" }}>Service Status</h2>
+      {/* LIVE SERVICE STATUS */}
+
+      <h2 style={{ marginTop: "35px" }}>
+        Service Status
+      </h2>
 
       {loading && <p>Loading services...</p>}
 
-      {error && <p style={{ color: "#f87171" }}>{error}</p>}
+      {error && (
+        <p style={{ color: "#f87171" }}>
+          {error}
+        </p>
+      )}
 
       {services.map((service) => (
-        <div key={service.name} style={serviceStyle}>
+        <div
+          key={service.name}
+          style={serviceStyle}
+        >
           <h3>{service.name}</h3>
+
           <p
             style={{
-              color: service.status === "UP" ? "#4ade80" : "#f87171",
+              color:
+                service.status === "UP"
+                  ? "#4ade80"
+                  : "#f87171",
               fontWeight: "bold"
             }}
           >
@@ -117,14 +169,80 @@ function App() {
         </div>
       ))}
 
-      <h2 style={{ marginTop: "40px" }}>Monitoring History</h2>
+      {/* ANOMALY DETECTION */}
+
+      <h2 style={{ marginTop: "40px" }}>
+        Service Risk Analysis
+      </h2>
 
       <p style={{ color: "#94a3b8" }}>
-        Total saved records: {history.length} | Showing latest 20
+        Rule-based anomaly detection using historical
+        service health records
+      </p>
+
+      {anomalyError && (
+        <p style={{ color: "#f87171" }}>
+          {anomalyError}
+        </p>
+      )}
+
+      <div
+        style={{
+          display: "flex",
+          gap: "15px",
+          flexWrap: "wrap"
+        }}
+      >
+        {anomalies.map((service) => (
+          <div
+            key={service.serviceName}
+            style={{
+              ...serviceStyle,
+              flex: "1",
+              minWidth: "200px"
+            }}
+          >
+            <h3>{service.serviceName}</h3>
+
+            <p>
+              Health Checks: {service.totalChecks}
+            </p>
+
+            <p>
+              Failures: {service.failures}
+            </p>
+
+            <p>
+              Failure Rate: {service.failureRate}%
+            </p>
+
+            <p
+              style={{
+                color: riskColor(service.riskLevel),
+                fontWeight: "bold"
+              }}
+            >
+              Risk Level: {service.riskLevel}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {/* MONITORING HISTORY */}
+
+      <h2 style={{ marginTop: "40px" }}>
+        Monitoring History
+      </h2>
+
+      <p style={{ color: "#94a3b8" }}>
+        Total saved records: {history.length} |
+        Showing latest 20
       </p>
 
       {historyError && (
-        <p style={{ color: "#f87171" }}>{historyError}</p>
+        <p style={{ color: "#f87171" }}>
+          {historyError}
+        </p>
       )}
 
       <div style={{ overflowX: "auto" }}>
@@ -138,8 +256,16 @@ function App() {
         >
           <thead>
             <tr>
-              {["ID", "Service Name", "Status", "Timestamp"].map((heading) => (
-                <th key={heading} style={cellStyle}>
+              {[
+                "ID",
+                "Service Name",
+                "Status",
+                "Timestamp"
+              ].map((heading) => (
+                <th
+                  key={heading}
+                  style={cellStyle}
+                >
                   {heading}
                 </th>
               ))}
@@ -149,19 +275,31 @@ function App() {
           <tbody>
             {recentHistory.map((record) => (
               <tr key={record.id}>
-                <td style={cellStyle}>{record.id}</td>
-                <td style={cellStyle}>{record.serviceName}</td>
+                <td style={cellStyle}>
+                  {record.id}
+                </td>
+
+                <td style={cellStyle}>
+                  {record.serviceName}
+                </td>
+
                 <td
                   style={{
                     ...cellStyle,
-                    color: record.status === "UP" ? "#4ade80" : "#f87171",
+                    color:
+                      record.status === "UP"
+                        ? "#4ade80"
+                        : "#f87171",
                     fontWeight: "bold"
                   }}
                 >
                   ● {record.status}
                 </td>
+
                 <td style={cellStyle}>
-                  {new Date(record.timestamp).toLocaleString()}
+                  {new Date(
+                    record.timestamp
+                  ).toLocaleString()}
                 </td>
               </tr>
             ))}
@@ -169,12 +307,20 @@ function App() {
         </table>
       </div>
 
-      <p style={{ marginTop: "30px", color: "#94a3b8" }}>
+      {/* FOOTER */}
+
+      <p
+        style={{
+          marginTop: "30px",
+          color: "#94a3b8"
+        }}
+      >
         Auto-refresh: Every 5 seconds
       </p>
 
       <p style={{ color: "#94a3b8" }}>
-        Last updated: {lastUpdated || "Not yet updated"}
+        Last updated:{" "}
+        {lastUpdated || "Not yet updated"}
       </p>
     </div>
   );
